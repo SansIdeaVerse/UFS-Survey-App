@@ -39,3 +39,33 @@ Stage Summary:
   - `src/app/{layout,page}.tsx`
   - `public/manifest.webmanifest`, `public/icons/*.svg`
 - Browser-verified: rendering, golden-path interactions (save/copy/export/delete), responsive (mobile bottom tabs vs desktop two-column), dark mode.
+
+---
+Task ID: 2
+Agent: main
+Task: Make the app deployable to GitHub Pages (static export + auto-deploy workflow).
+
+Work Log:
+- Read existing `next.config.ts` (was `output: "standalone"` for Docker/Caddy) and `Caddyfile` to preserve the local deployment path.
+- Rewrote `next.config.ts` to be conditional: when `GITHUB_PAGES=true`, switch to `output: "export"`, apply `basePath` + `assetPrefix` from `NEXT_PUBLIC_BASE_PATH`, set `images.unoptimized: true`, and `trailingSlash: true`. Default (dev/local Docker) keeps `output: "standalone"`.
+- Added `build:gh-pages` script in `package.json`: `GITHUB_PAGES=true next build`. Existing `build` (Docker) and `dev` scripts left untouched.
+- Rewrote `public/manifest.webmanifest` with relative paths: `start_url: "./"`, `scope: "./"`, icon `src` values like `icons/icon-192.svg` so the manifest resolves correctly under any subpath (project pages and user/org pages).
+- Added empty `public/.nojekyll` so GitHub Pages doesn't strip Next.js `_next/` asset directories.
+- Created `.github/workflows/deploy.yml` — auto-deploys on push to main/master:
+  - Checks out, sets up Bun, computes `NEXT_PUBLIC_BASE_PATH` (empty for `<owner>.github.io` repos, `/<repo>` for project repos).
+  - Runs `bun install --frozen-lockfile` then `bun run build:gh-pages` with the env vars.
+  - Touches `./out/.nojekyll`, uploads `./out` as the Pages artifact, then deploys via `actions/deploy-pages@v4`.
+  - Permissions, environment, and concurrency block configured per GitHub's official pattern.
+- Verified `bun run lint` still clean and dev server (port 3000) auto-restarted after the config change and continues to serve the app at HTTP 200.
+
+Stage Summary:
+- Same codebase now builds two ways:
+  - Local/Docker: `bun run build` → standalone server (unchanged).
+  - GitHub Pages: `bun run build:gh-pages` (or push to GitHub) → static export in `out/`.
+- Files touched/added:
+  - `next.config.ts` (conditional export + basePath)
+  - `package.json` (new `build:gh-pages` script)
+  - `public/manifest.webmanifest` (relative paths)
+  - `public/.nojekyll` (new)
+  - `.github/workflows/deploy.yml` (new)
+- Browser-verified the dev server still serves the app correctly after the config change.
